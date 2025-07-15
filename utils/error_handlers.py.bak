@@ -1,0 +1,12 @@
+from aiogram import Dispatcher
+from aiogram.types import ErrorEvent
+
+async def handle_telegram_errors(event: ErrorEvent):
+    """Обработчик ошибок Telegram API"""
+    error = event.exception
+    if isinstance(error, TelegramAPIError):
+        logging.error(f"Telegram API error: {error}")
+    # Другие обработчики...
+
+def register_error_handlers(dp: Dispatcher):
+    dp.errors.register(handle_telegram_errors)

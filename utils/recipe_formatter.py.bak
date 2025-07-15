@@ -1,0 +1,10 @@
+def format_recipe(raw_recipe: str) -> str:
+    """Добавляет садистские emoji и форматирование"""
+    return (
+        raw_recipe
+        .replace("1.", "🔪 1.")
+        .replace("2.", "📜 2.")
+        .replace("3.", "👩‍🍳 3.")
+        .replace("4.", "💀 4.")
+        .replace("5.", "⚗️ 5.")
+    )
