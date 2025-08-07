@@ -867,7 +867,7 @@
     "id": "blue_cheese_rebellion",
     "trigger_keys": ["blue_cheese", "smetana", "mayonnaise"],
     "priority": 38,
-    "category": "Соусы",
+    "category": "sauces",
     "title": "Соус Блю-чиз «Народный бунт»",
 	"intention_aliases": [
       "соус блю чиз",
@@ -895,7 +895,7 @@
     "id": "blue_cheese_aristocracy",
     "trigger_keys": ["blue_cheese", "cream"],
     "priority": 39,
-    "category": "Соусы",
+    "category": "sauces",
     "title": "Соус Блю-чиз «Эмульсия аристократа»",
 	"intention_aliases": [
       "горячий соус блю чиз",
@@ -1010,7 +1010,7 @@
   "id": "emerald_poison_sauce",
   "trigger_keys": ["gooseberry", "hot_pepper", "mint", "honey"],
   "priority": 40,
-  "category": "Соусы",
+  "category": "sauces",
   "title": "Соус для крыльев «Изумрудный Яд»",
   "intention_aliases": [
       "изумрудный яд",
