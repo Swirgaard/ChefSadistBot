@@ -43,21 +43,52 @@ def load_knowledge_base():
         logging.critical(f"Критическая ошибка загрузки базы знаний: {e}", exc_info=True)
         raise
 
+# Новая вспомогательная функция для нормализации текста
+def normalize_text(text: str) -> str:
+    """Нормализует текст: переводит в нижний регистр, заменяет 'ё' на 'е'."""
+    return text.lower().replace('ё', 'е')
+
 def parse_user_query(text: str) -> List[str]:
-    """Извлекает и нормализует ключи ингредиентов из запроса пользователя."""
-    cleaned_text = text.lower()
+    """Извлекает и нормализует ключи ингредиентов из запроса пользователя,
+    приоритизируя многословные алиасы и предотвращая некорректные совпадения."""
+    
+    cleaned_text = normalize_text(text)
     found_keys = set()
     ingredients_db = KNOWLEDGE_BASE.get("ingredients", {})
     
+    # Шаг 1: Создаем список всех возможных поисковых терминов
+    # в формате (normalized_alias, original_ingredient_key)
+    all_search_terms = []
     for key, data in ingredients_db.items():
-        search_terms = data.get("aliases", [])
-        search_terms.append(key)
-        
-        for term in search_terms:
-            if re.search(r'\b' + re.escape(term.lower()) + r'\b', cleaned_text):
-                found_keys.add(key)
-                break
+        aliases = data.get("aliases", [])
+        aliases.append(key) # Добавляем сам ключ как поисковый термин
+        for alias in aliases:
+            all_search_terms.append((normalize_text(alias), key))
     
+    # Шаг 2: Сортируем список от самых длинных алиасов к самым коротким
+    # Это гарантирует, что "сливочное масло" будет проверено раньше, чем "масло"
+    all_search_terms.sort(key=lambda x: len(x[0]), reverse=True)
+    
+    # Шаг 3: Проходим по отсортированным терминам и ищем совпадения.
+    # Используем временный текст, из которого будем "удалять" найденные фразы,
+    # чтобы избежать повторных или неправильных совпадений.
+    # Добавляем пробелы в начале и конце, чтобы '\b' работал корректно для начала/конца строки.
+    temp_text = " " + cleaned_text + " " 
+
+    for term_alias, ingredient_key in all_search_terms:
+        # Строим паттерн для поиска целого слова или фразы (с пробелами по краям)
+        # re.escape() экранирует специальные символы в term_alias
+        pattern = r'\b' + re.escape(term_alias) + r'\b'
+        
+        match = re.search(pattern, temp_text)
+        if match:
+            found_keys.add(ingredient_key)
+            # "Потребляем" найденную часть строки, заменяя ее на пробелы.
+            # Это предотвращает повторное нахождение более коротких алиасов
+            # внутри уже найденного (например, "масло" внутри "сливочное масло", если они для РАЗНЫХ ингредиентов).
+            start_index, end_index = match.span()
+            temp_text = temp_text[:start_index] + ' ' * (end_index - start_index) + temp_text[end_index:]
+            
     logging.info(f"Парсер нашел следующие ключи: {list(found_keys)}")
     return list(found_keys)
 

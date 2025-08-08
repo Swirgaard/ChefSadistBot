@@ -10,14 +10,14 @@ from aiogram.filters import Command
 from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-# Импортируем ВСЕ необходимые функции и переменные
+# Импортируем ВСЕ необходимые функции и переменные из recipe_synthesizer
 from utils.recipe_synthesizer import (
     KNOWLEDGE_BASE, 
     load_knowledge_base, 
     synthesize_response, 
     find_random_recipe_by_category,
     assemble_recipe,
-    find_recipe_by_intention
+    find_recipe_by_intention # <-- Теперь он точно здесь!
 )
 
 # --- БЛОК НАСТРОЙКИ ---
@@ -48,40 +48,48 @@ USER_SESSIONS = {}
 # --- СЛУЖЕБНЫЕ ФУНКЦИИ ---
 
 def get_user_session(user_id: int) -> dict:
-    """Гарантированно получает или создает сессию для пользователя."""
+    """Гарантированно получает или создает сессию для пользователя.
+    Инициализирует все необходимые счетчики и словари."""
     session = USER_SESSIONS.setdefault(user_id, {})
     session.setdefault("category_clicks", {})
     session.setdefault("seen_recipes", {})
-    session.setdefault("total_clicks", 0) # Добавляем общий счетчик для глобальной агрессии
+    session.setdefault("total_clicks", 0)
     return session
 
 def get_main_menu_builder() -> InlineKeyboardBuilder:
-    """Собирает и возвращает билдер для главного меню."""
+    """Собирает и возвращает билдер для главного меню с категориями."""
     builder = InlineKeyboardBuilder()
+    # Перестроенный список категорий для новой раскладки 5х2
     categories = [
         ("🔥 Горячее", "hot_dishes"), 
-        ("🥣 Супы", "soups"), # <-- НАША НОВАЯ КАТЕГОРИЯ
+        ("🥣 Супы", "soups"), 
         ("🍝 Паста", "pasta"),
         ("🥗 Салаты", "salads"), 
         ("🥔 Гарниры", "garnishes"),
         ("🍳 Завтраки", "breakfasts"),
         ("🥪 Бутерброды", "sandwiches"),
         ("🍰 Десерты", "desserts"),
-        ("🌶️ Соусы", "sauces"),
+        ("🌶️ Соусы", "sauces"), # Ключ изменен на английский для единообразия
         ("🍕 Фастфуд", "fast_food")
     ]
     for text, category_key in categories:
         builder.add(InlineKeyboardButton(text=text, callback_data=f"category_{category_key}"))
     
-    builder.adjust(2) # Новая, элегантная раскладка 5х2
+    builder.adjust(2) # Раскладка 5х2
     return builder
 
 async def send_recipe_response(message: types.Message, response_data: dict):
-    """Отправляет рецепт И следом - ГЛАВНОЕ МЕНЮ."""
-    response_text = response_data["text"]
-    found_terms = response_data["found_terms"]
+    """Универсальная функция для отправки ответа.
+    Обрабатывает текст, кнопки терминов ИЛИ кнопки опций.
+    Всегда отправляет главное меню после основного ответа."""
     
-    if found_terms:
+    response_text = response_data["text"]
+    found_terms = response_data.get("found_terms", []) # Используем .get на случай, если их нет
+    reply_markup = response_data.get("reply_markup") # Клавиатура для опций, если есть
+    
+    if reply_markup: # Если synthesize_response вернула клавиатуру (для опций)
+        await message.answer(response_text, reply_markup=reply_markup)
+    elif found_terms: # Если есть термины для пояснения
         builder = InlineKeyboardBuilder()
         terms_db = KNOWLEDGE_BASE.get("terms", {})
         for term_id in found_terms:
@@ -89,11 +97,12 @@ async def send_recipe_response(message: types.Message, response_data: dict):
             builder.add(InlineKeyboardButton(text=f"🤔 Что такое «{term_name}»?", callback_data=f"term_{term_id}"))
         builder.adjust(1)
         await message.answer(response_text, reply_markup=builder.as_markup())
-    else:
+    else: # Просто текст (рецепт, если нет терминов, или отказ)
         await message.answer(response_text)
         
-    logging.info(f"Отправлен рецепт для {message.from_user.id}. Найдено терминов: {len(found_terms)}")
+    logging.info(f"Отправлен ответ для {message.from_user.id}.")
 
+    # Главное меню всегда отправляется после основного ответа
     menu_builder = get_main_menu_builder()
     await message.answer("Чего желаешь теперь, экспериментатор?", reply_markup=menu_builder.as_markup())
 
@@ -103,7 +112,7 @@ async def send_recipe_response(message: types.Message, response_data: dict):
 async def start_command(message: types.Message):
     """Сбрасывает сессию и выдает клавиатуру категорий."""
     user_id = message.from_user.id
-    USER_SESSIONS[user_id] = {"category_clicks": {}, "seen_recipes": {}}
+    USER_SESSIONS[user_id] = {"category_clicks": {}, "seen_recipes": {}, "total_clicks": 0} # Полный сброс сессии
     logging.info(f"Сессия для пользователя {user_id} сброшена.")
 
     builder = get_main_menu_builder()
@@ -115,6 +124,7 @@ async def start_command(message: types.Message):
     await message.answer(start_text, reply_markup=builder.as_markup())
     logging.info(f"Пользователь {user_id} запустил бота и получил клавиатуру категорий.")
 
+# Словарь для контекстных реакций на категории
 CATEGORY_REACTIONS = {
     "hot_dishes": "Только не съешь все сразу. Особенно на ночь.",
     "soups": "А, супы... Та самая жидкая, горячая (или холодная) субстанция, которая служит прелюдией к настоящей еде. Или заменяет ее, если ты на диете.",
@@ -142,6 +152,7 @@ async def handle_ingredients(message: types.Message):
     logging.info(f"Получен ручной запрос от {message.from_user.id}: '{user_query}'")
 
     # --- ЭТАП 1: ПОПЫТКА "ПРОЧИТАТЬ МЫСЛИ" ---
+    # find_recipe_by_intention возвращает ТОЛЬКО ОДИН РЕЦЕПТ, если найдет
     intended_recipe = find_recipe_by_intention(user_query)
     
     if intended_recipe:
@@ -153,6 +164,7 @@ async def handle_ingredients(message: types.Message):
 
     # --- ЭТАП 2: ЕСЛИ МЫСЛИ НЕ ПРОЧИТАНЫ - ИЩЕМ ПО ИНГРЕДИЕНТАМ ---
     logging.info("Намерение не найдено. Запускаю поиск по ингредиентам...")
+    # synthesize_response теперь может вернуть либо 1 рецепт, либо список опций с клавиатурой
     response_data = synthesize_response(user_query)
     await send_recipe_response(message, response_data)
 
@@ -163,7 +175,7 @@ async def process_term_callback(callback_query: types.CallbackQuery):
     terms_db = KNOWLEDGE_BASE.get("terms", {})
     term_data = terms_db.get(term_id)
     
-    await callback_query.answer()
+    await callback_query.answer() # Убираем "часики"
     if term_data:
         explanation = term_data.get("explanation", "Объяснение потерялось...")
         sarcastic_comment = random.choice(term_data.get("sarcastic_comments", ["..."]))
@@ -209,10 +221,7 @@ async def process_category_callback(callback_query: types.CallbackQuery):
     else:
         await callback_query.answer() # Убираем "часики", если никакой alert не сработал
 
-    # Уровень 1: Логика рецептов (остается без изменений)
-    # ... (весь код, начиная с 'recipes_db = ...' и до конца, остается таким же) ...
-    # Я его не копирую сюда, чтобы не загромождать. Просто вставь его после этого блока.
-
+    # Уровень 1: Логика рецептов
     recipes_db = KNOWLEDGE_BASE.get("recipes", [])
     candidates = [recipe for recipe in recipes_db if recipe.get("category") == category]
     
@@ -242,10 +251,37 @@ async def process_category_callback(callback_query: types.CallbackQuery):
         seen_in_category.clear()
         session["category_clicks"][category] = 0
 
-    response_data = assemble_recipe(chosen_recipe)
+    response_data = assemble_recipe(chosen_recipe) # assemble_recipe не возвращает reply_markup
     await send_recipe_response(callback_query.message, response_data)
         
     logging.info(f"Пользователю {user_id} был выдан рецепт '{chosen_recipe['id']}' по категории '{category}'. Кликов по этой категории: {category_clicks}. Всего кликов: {total_clicks}.")
+
+
+@dp.callback_query(F.data.startswith("show_recipe_"))
+async def process_show_recipe_callback(callback_query: types.CallbackQuery):
+    """Обработчик кнопок выбора рецепта из списка предложенных вариантов."""
+    recipe_id = callback_query.data.split("_", 1)[1]
+    
+    await callback_query.answer() # Убираем "часики"
+    
+    recipes_db = KNOWLEDGE_BASE.get("recipes", [])
+    chosen_recipe = None
+    for recipe in recipes_db:
+        if recipe.get("id") == recipe_id:
+            chosen_recipe = recipe
+            break
+
+    if chosen_recipe:
+        response_data = assemble_recipe(chosen_recipe) # Собираем рецепт и термины для него
+        # send_recipe_response теперь умеет отправлять и текст, и кнопки терминов, и главное меню
+        await send_recipe_response(callback_query.message, response_data)
+        logging.info(f"Пользователь {callback_query.from_user.id} выбрал рецепт '{recipe_id}' из списка опций.")
+    else:
+        await callback_query.message.answer("Извини, этот рецепт куда-то пропал из моей памяти. Попробуй выбрать что-то другое.")
+        # Если рецепт не найден, все равно отправляем главное меню
+        menu_builder = get_main_menu_builder()
+        await callback_query.message.answer("Чего желаешь теперь, экспериментатор?", reply_markup=menu_builder.as_markup())
+
 
 # --- ЗАПУСК БОТА ---
 
