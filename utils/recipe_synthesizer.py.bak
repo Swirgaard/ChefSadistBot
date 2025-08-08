@@ -190,6 +190,28 @@ def assemble_recipe(recipe_template: Dict) -> Dict[str, Any]:
 
     return {"text": final_text, "found_terms": found_terms}
 
+def find_recipe_by_intention(query: str) -> dict | None:
+    """
+    Ищет рецепт по прямому совпадению в 'intention_aliases'.
+    Возвращает полный объект рецепта или None, если ничего не найдено.
+    """
+    # Приводим запрос пользователя к нижнему регистру для корректного сравнения
+    normalized_query = query.lower()
+    
+    recipes = KNOWLEDGE_BASE.get("recipes", [])
+    
+    for recipe in recipes:
+        # Проверяем, есть ли у рецепта вообще ключ intention_aliases
+        if "intention_aliases" in recipe:
+            for alias in recipe["intention_aliases"]:
+                # Если какой-либо из алиасов содержится в запросе пользователя
+                if alias in normalized_query:
+                    # Нашли! Возвращаем весь объект рецепта.
+                    return recipe
+                    
+    # Если прошли весь цикл и ничего не нашли
+    return None
+
 def synthesize_response(user_query: str) -> Dict[str, Any]:
     """Главная управляющая функция. Возвращает СЛОВАРЬ с текстом и терминами."""
     found_ingredients = parse_user_query(user_query)
