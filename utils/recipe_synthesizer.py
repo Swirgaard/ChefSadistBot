@@ -92,7 +92,7 @@ def parse_user_query(text: str) -> List[str]:
     logging.info(f"Парсер нашел следующие ключи: {list(found_keys)}")
     return list(found_keys)
 
-ddef find_matching_recipe(found_ingredients_keys: List[str]) -> Dict[str, Any]:
+def find_matching_recipe(found_ingredients_keys: List[str]) -> Dict[str, Any]:
     """
     Находит НАИБОЛЕЕ подходящие рецепты, анализируя ВСЕ варианты
     и выбирая лучшие по новой метрике релевантности.

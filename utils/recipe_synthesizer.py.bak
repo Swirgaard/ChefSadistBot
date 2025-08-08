@@ -92,25 +92,26 @@ def parse_user_query(text: str) -> List[str]:
     logging.info(f"Парсер нашел следующие ключи: {list(found_keys)}")
     return list(found_keys)
 
-def find_matching_recipe(found_ingredients_keys: List[str]) -> Dict[str, Any]:
+ddef find_matching_recipe(found_ingredients_keys: List[str]) -> Dict[str, Any]:
     """
-    Находит НАИБОЛЕЕ подходящий рецепт, анализируя ВСЕ варианты
-    и выбирая лучший по количеству совпадений и приоритету.
+    Находит НАИБОЛЕЕ подходящие рецепты, анализируя ВСЕ варианты
+    и выбирая лучшие по новой метрике релевантности.
+    Возвращает список кандидатов или лучший идеальный матч.
     """
     recipes_db = KNOWLEDGE_BASE.get("recipes", [])
     found_set = set(found_ingredients_keys)
     
     perfect_matches = []
-    partial_matches = []
+    partial_candidates = [] # Список для всех частичных совпадений, которые мы будем анализировать
 
     for recipe in recipes_db:
         trigger_keys = set(recipe.get("trigger_keys", []))
         if not trigger_keys:
             continue
 
-        # Считаем и совпадения, и недостающие части
         matching_keys = found_set.intersection(trigger_keys)
         missing_keys = trigger_keys - found_set
+        excess_keys = found_set - trigger_keys # Ингредиенты пользователя, которые не нужны рецепту
         
         # Если все ключи на месте — это идеальный кандидат
         if not missing_keys:
@@ -118,35 +119,57 @@ def find_matching_recipe(found_ingredients_keys: List[str]) -> Dict[str, Any]:
             continue
 
         # Если есть хотя бы одно совпадение, но не все — это частичный кандидат
-        # Добавляем условие, что не хватать должно не более 2-х ингредиентов
-        if matching_keys and missing_keys and len(missing_keys) <= 2:
-            partial_matches.append({
+        # Добавляем условие, что не хватать должно не более 2-х ингредиентов (старое правило)
+        if matching_keys and len(missing_keys) <= 2:
+            # Новая метрика релевантности:
+            # Приоритет:
+            # 1. Больше совпадений (match_count)
+            # 2. Меньше недостающих ингредиентов (len(missing_keys))
+            # 3. Меньше лишних ингредиентов (len(excess_keys))
+            # 4. Выше приоритет рецепта (recipe.get("priority"))
+            relevance_score = (
+                len(matching_keys),
+                -len(missing_keys), # Минусы, потому что мы хотим МЕНЬШЕ недостающих
+                -len(excess_keys),  # Минусы, потому что мы хотим МЕНЬШЕ лишних
+                recipe.get("priority", 0)
+            )
+
+            partial_candidates.append({
                 "recipe": recipe,
-                "match_count": len(matching_keys), # Самое важное новое поле!
-                "missing_keys": list(missing_keys)
+                "match_count": len(matching_keys),
+                "missing_keys": list(missing_keys),
+                "excess_keys": list(excess_keys), # Добавлено для отладки
+                "score": relevance_score # Новое поле для сортировки
             })
 
     # Сначала всегда отдаем предпочтение идеальным совпадениям
     if perfect_matches:
         best_candidate = sorted(perfect_matches, key=lambda r: r.get("priority", 0), reverse=True)[0]
         logging.info(f"Найдено идеальное совпадение: '{best_candidate.get('id')}'")
-        return {"status": "perfect", "recipe": best_candidate, "missing_keys": []}
+        return {"status": "perfect", "recipe": best_candidate, "options": [], "missing_keys": []}
 
-    # Если идеальных нет, ищем ЛУЧШЕЕ из частичных
-    if partial_matches:
-        # Сортируем сначала по количеству совпадений (чем больше, тем лучше),
-        # а потом, в случае равенства, по приоритету (чем выше, тем лучше).
-        best_candidate_info = sorted(
-            partial_matches, 
-            key=lambda p: (p["match_count"], p["recipe"].get("priority", 0)), 
-            reverse=True
-        )[0]
+    # Если идеальных нет, ищем ЛУЧШЕЕ из частичных или несколько лучших
+    if partial_candidates:
+        # Сортируем по новой метрике релевантности
+        partial_candidates.sort(key=lambda p: p["score"], reverse=True)
         
-        logging.info(f"Найдено ЛУЧШЕЕ частичное совпадение: '{best_candidate_info['recipe'].get('id')}', совпало: {best_candidate_info['match_count']}, не хватает: {best_candidate_info['missing_keys']}")
-        return {"status": "partial", "recipe": best_candidate_info["recipe"], "missing_keys": best_candidate_info["missing_keys"]}
+        # Возвращаем до 3-х лучших вариантов, если они достаточно "хороши"
+        # "Хорошесть" определяется, например, минимальным количеством совпадений (например, > 1)
+        # и максимальным количеством лишних (например, не более 5-ти)
+        top_options = []
+        for p_info in partial_candidates:
+            # Добавим минимальный порог совпадений, чтобы не предлагать слишком плохие варианты
+            if p_info["match_count"] > 0: # Должно быть хотя бы одно совпадение
+                top_options.append(p_info)
+            if len(top_options) >= 3: # Ограничиваем до 3 вариантов
+                break
+
+        if top_options:
+            logging.info(f"Найдено {len(top_options)} частичных совпадений. Лучшие: {[p['recipe'].get('id') for p in top_options]}")
+            return {"status": "partial_options", "options": top_options, "recipe": None, "missing_keys": []}
 
     logging.warning(f"Для набора {found_ingredients_keys} не найдено ни идеальных, ни частичных совпадений.")
-    return {"status": "none", "recipe": None, "missing_keys": []}
+    return {"status": "none", "recipe": None, "options": [], "missing_keys": []}
 
 def find_terms_in_text(text: str) -> List[str]:
     """Сканирует текст и возвращает список ID найденных терминов."""
