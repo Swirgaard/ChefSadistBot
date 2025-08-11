@@ -208,16 +208,18 @@ async def process_category_callback(callback_query: types.CallbackQuery):
     
     total_clicks = session["total_clicks"]
 
-    # Уровень 3: Глобальная усталость (самый высокий приоритет)
-    if total_clicks > 25:
+# Уровень 3: Глобальная усталость (самый высокий приоритет)
+    # Это не кликер - после 50 кликов
+    if total_clicks > 50:
         await callback_query.answer("Это не кликер, угомонись!", show_alert=True)
         return # Прерываем выполнение
-    elif total_clicks > 15:
+    # Пожалей мышку - после 40 кликов
+    elif total_clicks > 40:
         await callback_query.answer("Хватит кликать, пожалей мышку.", show_alert=True)
         return # Прерываем выполнение
 
     # Уровень 2: Контекстная эмпатия
-    REACTION_THRESHOLD = 5 # Поднимаем порог до 5, как ты и просил
+    REACTION_THRESHOLD = 15 # Поднимаем порог до 15 кликов по категории
     if category_clicks == REACTION_THRESHOLD:
         reaction_text = CATEGORY_REACTIONS.get(category, "У тебя какой-то особый интерес к этой категории...")
         await callback_query.answer(reaction_text, show_alert=True)
