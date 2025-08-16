@@ -249,8 +249,8 @@ def find_recipe_by_intention(query: str) -> dict | None:
     Ищет рецепт по прямому совпадению в 'intention_aliases'.
     Возвращает полный объект рецепта или None, если ничего не найдено.
     """
-    # Приводим запрос пользователя к нижнему регистру для корректного сравнения
-    normalized_query = query.lower()
+    # Приводим запрос пользователя к нижнему регистру и нормализуем пробелы
+    normalized_query = " ".join(query.lower().split())
     
     recipes = KNOWLEDGE_BASE.get("recipes", [])
     
@@ -264,6 +264,17 @@ def find_recipe_by_intention(query: str) -> dict | None:
                     return recipe
                     
     # Если прошли весь цикл и ничего не нашли
+    return None
+
+def find_recipe_by_id(recipe_id: str) -> dict | None:
+    """
+    Находит рецепт в базе знаний по его уникальному ID.
+    Возвращает словарь с рецептом или None, если ничего не найдено.
+    """
+    recipes_db = KNOWLEDGE_BASE.get("recipes", [])
+    for recipe in recipes_db:
+        if recipe.get("id") == recipe_id:
+            return recipe
     return None
 
 def synthesize_response(user_query: str) -> Dict[str, Any]:
