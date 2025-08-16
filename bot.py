@@ -321,8 +321,10 @@ async def process_category_callback(callback_query: types.CallbackQuery):
 
 @dp.callback_query(F.data.startswith("show_recipe_"))
 async def process_show_recipe_callback(callback_query: types.CallbackQuery):
-    """Обработчик кнопок выбора рецепта из списка предложенных вариантов."""
-    recipe_id = callback_query.data.split("_", 1)[1]
+    """Обработчик кнопок выбора рецепта из списка предложенных вариантов. V2.0 - Исправлена логика парсинга ID."""
+    
+    # ИСПРАВЛЕНИЕ: Используем более надежный метод .removeprefix()
+    recipe_id = callback_query.data.removeprefix("show_recipe_")
     
     await callback_query.answer()
     
@@ -334,6 +336,8 @@ async def process_show_recipe_callback(callback_query: types.CallbackQuery):
         await send_related_recipes_suggestions(callback_query.message, chosen_recipe)
         logging.info(f"Пользователь {callback_query.from_user.id} выбрал рецепт '{recipe_id}' из списка опций.")
     else:
+        # Эта ветка теперь будет срабатывать только в случае реальной рассинхронизации данных
+        logging.error(f"КРИТИЧЕСКАЯ ОШИБКА: Не найден рецепт с ID '{recipe_id}', хотя на него была сгенерирована ссылка!")
         await callback_query.message.answer("Извини, этот рецепт куда-то пропал из моей памяти. Попробуй выбрать что-то другое.")
         menu_builder = get_main_menu_builder()
         await callback_query.message.answer("Чего желаешь теперь, экспериментатор?", reply_markup=menu_builder.as_markup())
