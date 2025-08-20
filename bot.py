@@ -116,7 +116,8 @@ def get_main_menu_builder() -> InlineKeyboardBuilder:
     for text, category_key in categories:
         builder.add(InlineKeyboardButton(text=text, callback_data=f"category_{category_key}"))
 
-    builder.adjust(7)
+    # Каноническая раскладка, утвержденная Архитектором v2.0
+    builder.adjust(2) # <-- ИЗМЕНЕНИЕ: 2 КОЛОННЫ
     return builder
 
 async def send_recipe_response(message: types.Message, response_data: dict):
