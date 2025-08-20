@@ -4,6 +4,8 @@ import re
 import logging
 import os
 from typing import Dict, List, Optional, Any
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import InlineKeyboardButton
 
 KNOWLEDGE_BASE: Dict[str, Any] = {}
 

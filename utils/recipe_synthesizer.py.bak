@@ -278,14 +278,14 @@ def find_recipe_by_id(recipe_id: str) -> dict | None:
     return None
 
 def synthesize_response(user_query: str) -> Dict[str, Any]:
-    """Главная управляющая функция. Возвращает СЛОВАРЬ с текстом и терминами."""
+    """Главная управляющая функция. Возвращает СЛОВАРЬ с текстом, терминами и/или кнопками для опций."""
     found_ingredients = parse_user_query(user_query)
     phrases = KNOWLEDGE_BASE.get("phrases", {})
     ingredients_db = KNOWLEDGE_BASE.get("ingredients", {})
     
     if not found_ingredients:
         return {
-            "text": phrases.get("rejection_phrases", {}).get("no_ingredients_found", "Ошибка."),
+            "text": phrases.get("rejection_phrases", {}).get("no_ingredients_found", "Я не нашла никаких знакомых ингредиентов. Попробуй перечислить их более конкретно или проверь свой холодильник. Возможно, там уже завелась разумная жизнь и сожрала все запасы."),
             "found_terms": []
         }
 
@@ -294,23 +294,43 @@ def synthesize_response(user_query: str) -> Dict[str, Any]:
     if match_result["status"] == "perfect":
         return assemble_recipe(match_result["recipe"])
     
-    elif match_result["status"] == "partial":
-        recipe_name = match_result["recipe"].get("title", "Некий Эксперимент")
-
-        missing_names = []
-        for key in match_result["missing_keys"]:
-            missing_names.append(ingredients_db.get(key, {}).get("name_forms", {}).get("acc_sg", key))
-        missing_ingredients_str = ", ".join(missing_names)
-
-        template = phrases.get("rejection_phrases", {}).get("partial_match_found", "Ошибка. Шаблон не найден.")
+    elif match_result["status"] == "partial_options": # Теперь это обрабатывается здесь
+        builder = InlineKeyboardBuilder()
+        options_text_lines = []
         
+        # Собираем текст для предложенных опций
+        options_text_lines.append(phrases.get("rejection_phrases", {}).get("partial_match_options_intro", "Я не нашла идеального совпадения, но вот что можно попробовать:\n"))
+        
+        for i, p_info in enumerate(match_result["options"]):
+            recipe = p_info["recipe"]
+            missing_names = []
+            for key in p_info["missing_keys"]:
+                missing_names.append(ingredients_db.get(key, {}).get("name_forms", {}).get("acc_sg", key))
+            
+            excess_names = []
+            for key in p_info["excess_keys"]:
+                excess_names.append(ingredients_db.get(key, {}).get("name_forms", {}).get("acc_sg", key))
+
+            option_line = f"{i+1}. {recipe.get('title', 'Безымянный Протокол')} (есть: {p_info['match_count']}/{len(recipe.get('trigger_keys', []))}"
+            if missing_names:
+                option_line += f", не хватает: {', '.join(missing_names)}"
+            if excess_names: # Вывод лишних ингредиентов, если они есть
+                option_line += f", лишние: {', '.join(excess_names)}"
+            option_line += ")"
+            options_text_lines.append(option_line)
+            
+            builder.add(InlineKeyboardButton(text=f"Выбрать {i+1}", callback_data=f"show_recipe_{recipe.get('id')}"))
+        
+        builder.adjust(3) # Выравниваем кнопки по 3 в ряд
+
         return {
-            "text": template.format(RecipeName=recipe_name, MissingIngredients=missing_ingredients_str),
-            "found_terms": []
+            "text": "\n".join(options_text_lines),
+            "found_terms": [], # Термины не ищем на этапе выбора опций
+            "reply_markup": builder.as_markup() # Возвращаем клавиатуру
         }
 
-    else: # status == "none"
+    else: # status == "none" - когда совсем ничего не найдено
         return {
-            "text": phrases.get("rejection_phrases", {}).get("no_recipe_found", "Ошибка."),
+            "text": phrases.get("rejection_phrases", {}).get("no_recipe_found", "Моя извращенная фантазия не может придумать ничего путного из этого набора. Попробуй другую комбинацию или добавь что-то еще."),
             "found_terms": []
         }
