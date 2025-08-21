@@ -278,6 +278,36 @@ def find_recipe_by_id(recipe_id: str) -> dict | None:
         if recipe.get("id") == recipe_id:
             return recipe
     return None
+    
+def get_all_cuisines() -> List[str]:
+    """Собирает и возвращает уникальный, отсортированный список всех кухонь из базы."""
+    recipes_db = KNOWLEDGE_BASE.get("recipes", [])
+    cuisines = set()
+    for recipe in recipes_db:
+        if "cuisine" in recipe:
+            cuisines.add(recipe["cuisine"])
+    
+    sorted_cuisines = sorted(list(cuisines))
+    logging.info(f"Найдено {len(sorted_cuisines)} уникальных кухонь: {sorted_cuisines}")
+    return sorted_cuisines
+
+def find_random_recipe_by_cuisine(cuisine: str) -> Optional[Dict[str, Any]]:
+    """Находит случайный рецепт по заданной кухне. Аналогично категориям."""
+    recipes_db = KNOWLEDGE_BASE.get("recipes", [])
+    
+    candidates = [
+        recipe for recipe in recipes_db 
+        if recipe.get("cuisine") == cuisine
+    ]
+    
+    if not candidates:
+        logging.warning(f"Для кухни '{cuisine}' не найдено ни одного рецепта.")
+        return None
+    
+    chosen_recipe = random.choice(candidates)
+    logging.info(f"По кухне '{cuisine}' был случайно выбран рецепт '{chosen_recipe.get('id')}'.")
+    
+    return chosen_recipe    
 
 def synthesize_response(user_query: str) -> Dict[str, Any]:
     """Главная управляющая функция. Возвращает СЛОВАРЬ с текстом, терминами и/или кнопками для опций."""

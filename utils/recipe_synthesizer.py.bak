@@ -307,7 +307,7 @@ def synthesize_response(user_query: str) -> Dict[str, Any]:
             recipe = p_info["recipe"]
             missing_names = []
             for key in p_info["missing_keys"]:
-                missing_names.append(ingredients_db.get(key, {}).get("name_forms", {}).get("acc_sg", key))
+                missing_names.append(ingredients_db.get(key, {}).get("name_forms", {}).get("gen_sg", key))
             
             excess_names = []
             for key in p_info["excess_keys"]:
