@@ -25,6 +25,8 @@ from utils.recipe_synthesizer import (
 
 # --- БЛОК НАСТРОЙКИ ---
 
+AVATAR_FILE_ID = "AgACAgIAAxkBAAEe_cJoqeDPQQABdqopFWBt7xJQmTjL9-oAAsf-MRutn1FJFtggfGx7ZF4BAAMCAAN5AAM2BA"
+
 os.makedirs("logs", exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
@@ -77,7 +79,7 @@ CUISINE_NAMES = {
     "norwegian": "🇳🇴 Норвежская", "peruvian": "🇵🇪 Перуанская", "portuguese": "🇵🇹 Португальская",
     "russian": "🇷🇺 Русская", "russian_ukrainian": "🇷🇺/🇺🇦 Русская/Украинская", "scandinavian": "❄️ Скандинавская",
     "slovenian": "🇸🇮 Словенская", "soviet_union": "☭ СССР / Постсоветская", "spanish": "🇪🇸 Испанская",
-    "swedish": "🇸🇪 Шведская", "tatar": "Татарская", "tex-mex": "🇺🇸/🇲🇽 Tex-Mex", "thai": "🇹🇭 Тайская"
+    "swedish": "🇸🇪 Шведская", "tatar": " Tatar", "tex-mex": "🇺🇸/🇲🇽 Tex-Mex", "thai": "🇹🇭 Тайская"
 }
 
 # Словарь для контекстных реакций на категории
@@ -89,7 +91,6 @@ CATEGORY_REACTIONS = {
 # --- СЛУЖЕБНЫЕ ФУНКЦИИ ---
 
 def get_user_session(user_id: int) -> dict:
-    """Гарантированно получает или создает сессию для пользователя."""
     session = USER_SESSIONS.setdefault(user_id, {})
     session.setdefault("category_clicks", {})
     session.setdefault("seen_recipes", {})
@@ -100,7 +101,6 @@ def get_user_session(user_id: int) -> dict:
     return session
 
 def get_main_menu_builder() -> InlineKeyboardBuilder:
-    """Собирает и возвращает билдер для главного меню (категорий)."""
     builder = InlineKeyboardBuilder()
     categories = [
         ("🔥 Горячее", "hot_dishes"), ("🥣 Супы", "soups"), ("🍝 Паста", "pasta"),
@@ -116,7 +116,6 @@ def get_main_menu_builder() -> InlineKeyboardBuilder:
     return builder
 
 def get_cuisines_menu_builder() -> InlineKeyboardBuilder:
-    """Собирает и возвращает билдер для меню кухонь мира."""
     builder = InlineKeyboardBuilder()
     cuisines = get_all_cuisines()
     for cuisine_key in cuisines:
@@ -127,7 +126,6 @@ def get_cuisines_menu_builder() -> InlineKeyboardBuilder:
     return builder
 
 async def send_recipe_response(message_or_callback: types.Message | types.CallbackQuery, response_data: dict):
-    """Универсальная функция для отправки ответа с контекстной кнопкой 'Назад'."""
     user_id = message_or_callback.from_user.id
     target_message = message_or_callback if isinstance(message_or_callback, types.Message) else message_or_callback.message
     
@@ -201,7 +199,6 @@ async def show_cuisines_menu(callback_query: types.CallbackQuery, text: str):
 
 @dp.message(Command("start", "help"))
 async def start_command(message: types.Message):
-    """Сбрасывает сессию и выдает клавиатуру категорий."""
     USER_SESSIONS[message.from_user.id] = get_user_session(message.from_user.id)
     logging.info(f"Сессия для пользователя {message.from_user.id} сброшена.")
     start_text = (
@@ -214,8 +211,14 @@ async def start_command(message: types.Message):
         "Пробуй. Как сказал Гомер Симпсон, \"я пришел сюда, чтобы меня пичкали таблетками и били током, а не унижали!\". Так вот, унижать не буду. Насчет остального — не уверена\n\n"
         "Шеф Кира"
     )
-    await show_main_menu(message, start_text)
-    logging.info(f"Пользователь {message.from_user.id} запустил бота.")
+    builder = get_main_menu_builder()
+    await message.answer_photo(
+        photo=AVATAR_FILE_ID,
+        caption=start_text,
+        reply_markup=builder.as_markup(),
+        disable_web_page_preview=True
+    )
+    logging.info(f"Пользователь {message.from_user.id} запустил бота и получил приветствие с аватаром.")
 
 @dp.callback_query(F.data == "back_to_main")
 async def back_to_main_callback(callback_query: types.CallbackQuery):
