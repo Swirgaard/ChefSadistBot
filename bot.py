@@ -119,9 +119,23 @@ CUISINE_NAMES = {
     "thai": "🇹🇭 Тайская"
 }
 
-# Словарь для контекстных реакций на категории (оставлен без изменений)
+# Словарь для контекстных реакций на категории
 CATEGORY_REACTIONS = {
-    # ...
+    "hot_dishes": "Только не съешь все сразу. Особенно на ночь.",
+    "soups": "А, супы... Та самая жидкая, горячая (или холодная) субстанция, которая служит прелюдией к настоящей еде. Или заменяет ее, если ты на диете.",
+    "pasta": "Мммм, макароны... Хороший антидепрессант. Если выбрать быстро.",
+    "salads": "Овощи? Похвально. Но не думай, что у меня тут только трава. Покопайся, у нас и сытные, мясные салаты имеются. Ищи.",
+    "garnishes": "Выбрать гарнир — это полдела. Не забудь про горячее, пустой гарнир обычно очень грустно есть. Добавь хотя бы соус.",
+    "breakfasts": "Ты так долго выбираешь завтрак, что он скоро станет обедом.",
+    "sandwiches": "А, бутерброды... Быстро, просто и почти всегда вкусно. Главное — не питаться только ими.",
+    "desserts": "Не надо так налегать на сладкое. Бывший (или бывшая) этого не стоит.",
+    "sauces": "Посмотри, повыбирай, я не давлю. Но не сожги мясо, пока ты тут ищешь.",
+    "fast_food": "Сухомятка — не лучший выбор. Но если ты настолько голоден...",
+    "fried_gold": "А, это самое вредное... и самое вкусное! Смотри не сожги, а то будет не золото, а уголь.",
+    "drinks": "Напитки? Хорошо. Главное — чтобы потом не пришлось вызывать 'Скорую помощь'. Ищи, что тебе по вкусу.",
+    "baked_goods": "Выпечка... Чудесно. Это то, что делает твою жизнь чуть слаще. И твою талию — чуть шире. Выбирай осторожно.",
+    "meats_curing": "А, протоколы медленной алхимии. Здесь спешка — твой главный враг. Терпение, Архитектор.",
+    "veg_preserves": "Решил запастись на зиму? Или просто любишь хруст? В любом случае, это — игра вдолгую."
 }
 
 
@@ -183,8 +197,12 @@ async def send_recipe_response(message: types.Message, response_data: dict):
     found_terms = response_data.get("found_terms", [])
     reply_markup = response_data.get("reply_markup")
 
+    target_message = message
+    if isinstance(message, types.CallbackQuery):
+        target_message = message.message
+
     if reply_markup:
-        await message.answer(response_text, reply_markup=reply_markup)
+        await target_message.answer(response_text, reply_markup=reply_markup)
     elif found_terms:
         builder = InlineKeyboardBuilder()
         terms_db = KNOWLEDGE_BASE.get("terms", {})
@@ -192,9 +210,9 @@ async def send_recipe_response(message: types.Message, response_data: dict):
             term_name = terms_db.get(term_id, {}).get("aliases", ["Неизвестно"])[0]
             builder.add(InlineKeyboardButton(text=f"🤔 Что такое «{term_name}»?", callback_data=f"term_{term_id}"))
         builder.adjust(1)
-        await message.answer(response_text, reply_markup=builder.as_markup())
+        await target_message.answer(response_text, reply_markup=builder.as_markup())
     else:
-        await message.answer(response_text)
+        await target_message.answer(response_text)
 
     logging.info(f"Отправлен ответ для {user_id}.")
 
@@ -203,15 +221,19 @@ async def send_recipe_response(message: types.Message, response_data: dict):
 
     if last_menu_context == 'cuisines':
         menu_builder = get_cuisines_menu_builder()
-        await message.answer("Продолжим исследование кулинарных доктрин?", reply_markup=menu_builder.as_markup())
-    else: # 'main' or 'categories'
+        await target_message.answer("Продолжим исследование кулинарных доктрин?", reply_markup=menu_builder.as_markup())
+    else:
         menu_builder = get_main_menu_builder()
-        await message.answer("Чего желаешь теперь, экспериментатор?", reply_markup=menu_builder.as_markup())
+        await target_message.answer("Чего желаешь теперь, экспериментатор?", reply_markup=menu_builder.as_markup())
 
 async def send_related_recipes_suggestions(message: types.Message, recipe: dict):
-    """Остается без изменений."""
     related_ids = recipe.get("related_recipes")
     if not related_ids: return
+    
+    target_message = message
+    if isinstance(message, types.CallbackQuery):
+        target_message = message.message
+
     builder = InlineKeyboardBuilder()
     found_related_recipes = 0
     for recipe_id in related_ids:
@@ -221,25 +243,26 @@ async def send_related_recipes_suggestions(message: types.Message, recipe: dict)
             found_related_recipes += 1
     if found_related_recipes > 0:
         builder.adjust(1)
-        await message.answer("Кстати, по этой теме у меня есть и другие протоколы:", reply_markup=builder.as_markup())
+        await target_message.answer("Кстати, по этой теме у меня есть и другие протоколы:", reply_markup=builder.as_markup())
         logging.info(f"Пользователю {message.from_user.id} предложены связанные рецепты для '{recipe['id']}'.")
 
 # --- ОБРАБОТЧИКИ ---
 
-async def show_main_menu(message: types.Message, text: str):
+async def show_main_menu(message_or_callback: types.Message | types.CallbackQuery, text: str):
     """Универсальная функция для показа главного меню и сброса контекста."""
-    user_id = message.from_user.id
+    user_id = message_or_callback.from_user.id
     session = get_user_session(user_id)
     session['last_menu'] = 'main'
     logging.info(f"Контекст для пользователя {user_id} сброшен на 'main'.")
     
     builder = get_main_menu_builder()
     
-    # Если сообщение новое - отвечаем, если это коллбэк - редактируем
-    if isinstance(message, types.CallbackQuery):
-        await message.message.edit_text(text, reply_markup=builder.as_markup(), disable_web_page_preview=True)
+    if isinstance(message_or_callback, types.CallbackQuery):
+        # Prevent "Message is not modified" error
+        if message_or_callback.message.text != text or message_or_callback.message.reply_markup != builder.as_markup():
+            await message_or_callback.message.edit_text(text, reply_markup=builder.as_markup(), disable_web_page_preview=True)
     else:
-        await message.answer(text, reply_markup=builder.as_markup(), disable_web_page_preview=True)
+        await message_or_callback.answer(text, reply_markup=builder.as_markup(), disable_web_page_preview=True)
 
 @dp.message(Command("start", "help"))
 async def start_command(message: types.Message):
@@ -267,18 +290,20 @@ async def back_to_main_callback(callback_query: types.CallbackQuery):
 
 @dp.message()
 async def handle_ingredients(message: types.Message):
-    """Обработчик ручного ввода."""
     if not message.text or message.text.startswith('/'): return
     user_id = message.from_user.id
     user_query = message.text.lower().strip()
     logging.info(f"Получен ручной запрос от {user_id}: '{user_query}'")
 
     session = get_user_session(user_id)
-    session['last_menu'] = 'main' # Ручной ввод всегда сбрасывает контекст
+    session['last_menu'] = 'main'
 
     intended_recipe = find_recipe_by_intention(user_query)
     if intended_recipe:
-        # ... (логика остается прежней)
+        logging.info(f"Найдено намерение! Рецепт: {intended_recipe['id']}")
+        response_data = assemble_recipe(intended_recipe)
+        await send_recipe_response(message, response_data)
+        await send_related_recipes_suggestions(message, intended_recipe)
         return
 
     found_category = None
@@ -288,28 +313,45 @@ async def handle_ingredients(message: types.Message):
             break
     
     if found_category:
-        # ... (логика остается прежней)
+        logging.info(f"Запрос '{user_query}' распознан как категория '{found_category}'. Выдаю случайный рецепт.")
+        random_recipe = find_random_recipe_by_category(found_category)
+        if random_recipe:
+            response_data = assemble_recipe(random_recipe)
+            await send_recipe_response(message, response_data)
+            await send_related_recipes_suggestions(message, random_recipe)
+        else:
+            await message.answer(f"В категории «{found_category}» пока пусто, но я это запомню.")
+            menu_builder = get_main_menu_builder()
+            await message.answer("Чего желаешь теперь, экспериментатор?", reply_markup=menu_builder.as_markup())
         return
 
+    logging.info("Намерение или категория не найдены. Запускаю поиск по ингредиентам...")
     response_data = synthesize_response(user_query)
     await send_recipe_response(message, response_data)
 
 @dp.callback_query(F.data.startswith("term_"))
 async def process_term_callback(callback_query: types.CallbackQuery):
-    """Остается без изменений."""
-    # ...
+    term_id = callback_query.data.split("_", 1)[1]
+    terms_db = KNOWLEDGE_BASE.get("terms", {})
+    term_data = terms_db.get(term_id)
+    await callback_query.answer()
+    if term_data:
+        explanation = term_data.get("explanation", "Объяснение потерялось...")
+        sarcastic_comment = random.choice(term_data.get("sarcastic_comments", ["..."]))
+        term_name = term_data.get("aliases", ["Неизвестно"])[0].capitalize()
+        response_text = (f"<b>🎓 Ликбез по теме «{term_name}»</b>\n\n{explanation}\n\n<i><b>Мой комментарий:</b> {sarcastic_comment}</i>")
+        await callback_query.message.answer(response_text)
+    else:
+        await callback_query.message.answer("Упс... Я забыла, что это значит. Бывает.")
+    logging.info(f"Пользователь {callback_query.from_user.id} запросил объяснение для термина '{term_id}'.")
 
 @dp.callback_query(F.data == "show_cuisines")
 async def show_cuisines_callback(callback_query: types.CallbackQuery):
-    """Отображает клавиатуру со списком кухонь мира."""
     await callback_query.answer()
-    
     user_id = callback_query.from_user.id
     session = get_user_session(user_id)
     session['last_menu'] = 'cuisines'
-    
     builder = get_cuisines_menu_builder()
-    
     await callback_query.message.edit_text(
         "Выбери кулинарную доктрину, которую хочешь изучить. Но помни: путь к знанию лежит через дисциплину.",
         reply_markup=builder.as_markup()
@@ -318,50 +360,90 @@ async def show_cuisines_callback(callback_query: types.CallbackQuery):
 
 @dp.callback_query(F.data.startswith("cuisine_"))
 async def process_cuisine_callback(callback_query: types.CallbackQuery):
-    """Обрабатывает выбор кухни и выдает случайный рецепт из нее."""
     user_id = callback_query.from_user.id
     cuisine = callback_query.data.split("_", 1)[1]
-    
     await callback_query.answer()
-    
     session = get_user_session(user_id)
     session['last_menu'] = 'cuisines'
 
-    # Логика против закликивания и отслеживания просмотренных рецептов
-    # ... (остается прежней) ...
+    recipes_in_cuisine = [r for r in KNOWLEDGE_BASE.get("recipes", []) if r.get("cuisine") == cuisine]
+    if not recipes_in_cuisine:
+        await callback_query.message.answer(f"В доктрине «{CUISINE_NAMES.get(cuisine, cuisine)}» пока пусто. Я это запомню.")
+        return
 
-    chosen_recipe = find_random_recipe_by_cuisine(cuisine)
-    # ... (дальнейшая логика остается прежней) ...
+    seen_in_cuisine = session["seen_recipes_cuisine"].setdefault(cuisine, set())
+    available_recipes = [r for r in recipes_in_cuisine if r['id'] not in seen_in_cuisine]
+    
+    if not available_recipes:
+        await callback_query.message.answer(f"Кстати, ты только что изучил все протоколы доктрины «{CUISINE_NAMES.get(cuisine, cuisine)}». Начинаем новый цикл познания.")
+        seen_in_cuisine.clear()
+        available_recipes = recipes_in_cuisine
+
+    chosen_recipe = random.choice(available_recipes)
+    seen_in_cuisine.add(chosen_recipe['id'])
+
+    response_data = assemble_recipe(chosen_recipe)
+    await send_recipe_response(callback_query, response_data)
+    await send_related_recipes_suggestions(callback_query, chosen_recipe)
+    logging.info(f"Пользователю {user_id} был выдан рецепт '{chosen_recipe['id']}' по кухне '{cuisine}'.")
 
 @dp.callback_query(F.data.startswith("category_"))
 async def process_category_callback(callback_query: types.CallbackQuery):
-    """Обрабатывает выбор категории."""
     user_id = callback_query.from_user.id
     category = callback_query.data.split("_", 1)[1]
-    
     session = get_user_session(user_id)
-    session['last_menu'] = 'categories'
+    session['last_menu'] = 'main'
 
-    # Логика против закликивания и отслеживания просмотренных рецептов
-    # ... (остается прежней) ...
+    REACTION_THRESHOLD = 15
+    category_clicks = session["category_clicks"].get(category, 0) + 1
+    session["category_clicks"][category] = category_clicks
+    if category_clicks == REACTION_THRESHOLD:
+        reaction_text = CATEGORY_REACTIONS.get(category, "У тебя какой-то особый интерес к этой категории...")
+        await callback_query.answer(reaction_text, show_alert=True)
+        session["category_clicks"][category] = 0
+    else:
+        await callback_query.answer()
 
-    chosen_recipe = find_random_recipe_by_category(category)
-    # ... (дальнейшая логика остается прежней) ...
+    recipes_db = KNOWLEDGE_BASE.get("recipes", [])
+    candidates = [recipe for recipe in recipes_db if recipe.get("category") == category]
+    
+    if not candidates:
+        await callback_query.message.answer(f"В категории «{category}» пока пусто.")
+        return
+        
+    seen_in_category = session["seen_recipes"].setdefault(category, set())
+    available_recipes = [r for r in candidates if r['id'] not in seen_in_category]
+
+    if not available_recipes:
+        await callback_query.message.answer(f"Кстати, ты только что посмотрел все рецепты в категории «{category}». Начинаем новый круг.")
+        seen_in_category.clear()
+        available_recipes = candidates
+
+    chosen_recipe = random.choice(available_recipes)
+    seen_in_category.add(chosen_recipe['id'])
+
+    response_data = assemble_recipe(chosen_recipe)
+    await send_recipe_response(callback_query, response_data)
+    await send_related_recipes_suggestions(callback_query, chosen_recipe)
+    logging.info(f"Пользователю {user_id} был выдан рецепт '{chosen_recipe['id']}' по категории '{category}'.")
+
 
 @dp.callback_query(F.data.startswith("show_recipe_"))
 async def process_show_recipe_callback(callback_query: types.CallbackQuery):
-    """Обработчик кнопок выбора рецепта из списка предложенных вариантов."""
     await callback_query.answer()
     recipe_id = callback_query.data.removeprefix("show_recipe_")
     chosen_recipe = find_recipe_by_id(recipe_id)
 
     if chosen_recipe:
         response_data = assemble_recipe(chosen_recipe)
-        await send_recipe_response(callback_query.message, response_data)
-        await send_related_recipes_suggestions(callback_query.message, chosen_recipe)
+        await send_recipe_response(callback_query, response_data)
+        await send_related_recipes_suggestions(callback_query, chosen_recipe)
         logging.info(f"Пользователь {callback_query.from_user.id} выбрал рецепт '{recipe_id}' из списка опций.")
     else:
-        # ... (логика ошибки остается прежней) ...
+        logging.error(f"КРИТИЧЕСКАЯ ОШИБКА: Не найден рецепт с ID '{recipe_id}', хотя на него была сгенерирована ссылка!")
+        await callback_query.message.answer("Извини, этот рецепт куда-то пропал из моей памяти. Попробуй выбрать что-то другое.")
+        menu_builder = get_main_menu_builder()
+        await callback_query.message.answer("Чего желаешь теперь, экспериментатор?", reply_markup=menu_builder.as_markup())
 
 
 # --- ЗАПУСК БОТА ---
