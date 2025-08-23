@@ -3522,7 +3522,7 @@
   },
   {
     "id": "shashlik_oven_simulacrum",
-    "cuisine": "caucasian_soviet_fusion",
+    "cuisine": "soviet_union",
     "trigger_keys": ["meat", "onion", "vinegar", "liquid_smoke"],
     "priority": 90,
     "category": "hot_dishes",
@@ -3545,7 +3545,7 @@
   },
   {
     "id": "shashlik_mangal_ritual",
-    "cuisine": "caucasian_soviet_fusion",
+    "cuisine": "soviet_union",
     "trigger_keys": ["meat", "onion", "skewers"],
     "priority": 92,
     "category": "hot_dishes",
@@ -3566,7 +3566,7 @@
   },
   {
     "id": "chicken_grill_fiery_cage",
-    "cuisine": "caucasian_soviet_fusion",
+    "cuisine": "soviet_union",
     "trigger_keys": ["chicken_legs", "mayonnaise", "garlic"],
     "priority": 91,
     "category": "hot_dishes",
@@ -3763,7 +3763,7 @@
   },
   {
     "id": "salo_white_gold",
-    "cuisine": "ukrainian",
+    "cuisine": "russian_ukrainian",
     "trigger_keys": ["pork_fat", "garlic", "salt"],
     "priority": 85,
     "category": "meats_curing",
